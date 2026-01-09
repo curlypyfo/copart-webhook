@@ -1,6 +1,8 @@
 export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") return res.status(405).json({ ok: false, error: "POST only" });
+    if (req.method !== "POST") {
+      return res.status(405).json({ ok: false, error: "POST only" });
+    }
 
     // защита токеном из URL ?token=...
     const secret = req.query.token;
@@ -10,6 +12,27 @@ export default async function handler(req, res) {
 
     const body = req.body || {};
     const raw = JSON.stringify(body);
+
+    // ====== ЛОГИ: смотрим "чистый" входящий payload ======
+    const safeQuery = { ...req.query };
+    if (safeQuery.token) safeQuery.token = "***";
+
+    console.log("=== WEBHOOK IN ===");
+    console.log("time:", new Date().toISOString());
+    console.log("method:", req.method);
+    console.log("query:", safeQuery);
+    console.log("headers:", {
+      "content-type": req.headers["content-type"],
+      "user-agent": req.headers["user-agent"],
+      "x-forwarded-for": req.headers["x-forwarded-for"],
+    });
+    console.log("rawBody:", raw);
+    console.log("=============");
+
+    // ====== ПАУЗА: ничего не обрабатываем, только логируем ======
+    if (process.env.PAUSE_MODE === "1") {
+      return res.status(200).json({ ok: true, paused: true });
+    }
 
     // 1) достаём lot_id (поддерживаем разные форматы)
     let lotId =
@@ -25,7 +48,9 @@ export default async function handler(req, res) {
       if (m) lotId = m[1];
     }
 
-    if (!lotId) return res.status(200).json({ ok: true, skipped: true, reason: "NO_LOT_ID" });
+    if (!lotId) {
+      return res.status(200).json({ ok: true, skipped: true, reason: "NO_LOT_ID" });
+    }
 
     // 2) спрашиваем VIN у твоего Mac (через tunnel)
     const vinUrl = `${process.env.VIN_RESOLVER_URL}&lot_id=${encodeURIComponent(lotId)}`;
@@ -53,12 +78,14 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         chat_id: process.env.CHAT_ID,
         text: msg,
-        disable_web_page_preview: false
+        disable_web_page_preview: false,
       }),
     });
 
     return res.status(200).json({ ok: true, lotId, vin, odometer });
   } catch (e) {
+    console.log("HOOK ERROR:", String(e));
     return res.status(500).json({ ok: false, error: String(e) });
   }
 }
+
