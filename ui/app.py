@@ -79,7 +79,16 @@ st.title("Copart Bridge UI")
 
 if not st.session_state.auth_ok:
     st.subheader("Вход")
-    st.caption("Введите логин и пароль для доступа к Bridge API.")
+    st.caption("Введите адрес Bridge и логин/пароль для доступа к API.")
+    st.session_state.bridge_base_url = st.text_input(
+        "Bridge URL",
+        value=st.session_state.bridge_base_url,
+        help="Например: https://bridge.lotnotify.com"
+    )
+    if st.button("Сохранить адрес Bridge"):
+        ui_settings["bridge_base_url"] = st.session_state.bridge_base_url
+        save_ui_settings(ui_settings)
+        st.success("Адрес сохранен")
     st.session_state.bridge_user = st.text_input("Логин", value=st.session_state.bridge_user)
     st.session_state.bridge_pass = st.text_input("Пароль", type="password", value=st.session_state.bridge_pass)
     if st.button("Войти"):
