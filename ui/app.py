@@ -170,8 +170,13 @@ tabs = st.tabs(["📊 Логи", "🖥 Терминал", "🏁 Соревнов
 
 with tabs[0]:
 
-    status_payload = load_status()
-    status = status_payload.get("status", {})
+    status_payload = None
+    status = {}
+    try:
+        status_payload = load_status()
+        status = status_payload.get("status", {})
+    except Exception as exc:
+        st.warning(f"Статус bridge недоступен: {exc}")
     status_cols = st.columns(4)
     bridge_up = status.get("bridgeStartedAt")
     last_lot = status.get("lastLotTs")
