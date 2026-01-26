@@ -73,6 +73,18 @@ def load_catalog():
     return res.json()
 
 
+def load_terminal():
+    res = requests.get(f"{BRIDGE_BASE_URL}/terminal", headers=auth_headers(), timeout=5)
+    res.raise_for_status()
+    return res.json()
+
+
+def load_status():
+    res = requests.get(f"{BRIDGE_BASE_URL}/status", headers=auth_headers(), timeout=5)
+    res.raise_for_status()
+    return res.json()
+
+
 st.set_page_config(page_title="Copart Bridge UI", layout="wide")
 
 st.title("Copart Bridge UI")
@@ -154,9 +166,42 @@ config = load_config()
 active_profile = config["active_profile"]
 profile = config["profiles"][active_profile]
 
-tabs = st.tabs(["📊 Логи", "🏁 Соревнование", "🧰 Фильтры", "💰 Экономика", "🚚 Доставка", "📁 История"])
+tabs = st.tabs(["📊 Логи", "🖥 Терминал", "🏁 Соревнование", "🧰 Фильтры", "💰 Экономика", "🚚 Доставка", "📁 История"])
 
 with tabs[0]:
+
+    status_payload = load_status()
+    status = status_payload.get("status", {})
+    status_cols = st.columns(4)
+    bridge_up = status.get("bridgeStartedAt")
+    last_lot = status.get("lastLotTs")
+    ext = status.get("ext", {})
+    ext_state = "Online" if ext.get("connected") else "Offline"
+    status_cols[0].metric("Bridge", ext_state)
+    status_cols[1].metric("Расширение", "Подключено" if ext.get("connected") else "Нет")
+    if bridge_up:
+        up_time = datetime.fromtimestamp(bridge_up / 1000).strftime("%H:%M:%S")
+        status_cols[2].metric("Старт", up_time)
+    if last_lot:
+        last_lot_time = datetime.fromtimestamp(last_lot / 1000).strftime("%H:%M:%S")
+        status_cols[3].metric("Последний лот", last_lot_time)
+
+    st.caption("Статусы автологина по сайтам")
+    site_status = status.get("sites", {})
+    if site_status:
+        status_rows = []
+        for site, info in site_status.items():
+            ts = info.get("ts")
+            when = datetime.fromtimestamp(ts / 1000).strftime("%H:%M:%S") if ts else ""
+            status_rows.append({
+                "Сайт": site,
+                "Статус": info.get("level"),
+                "Сообщение": info.get("text"),
+                "Время": when
+            })
+        st.dataframe(status_rows, use_container_width=True)
+    else:
+        st.info("Пока нет статусов автологина")
 
     col1, col2, col3 = st.columns(3)
     refresh_sec = col1.number_input("Обновление (сек)", min_value=1, max_value=30, value=3, help="Автообновление ленты")
@@ -340,6 +385,24 @@ with tabs[0]:
 
 
 with tabs[1]:
+    st.subheader("Терминал")
+    terminal_logs = load_terminal()
+    if terminal_logs:
+        terminal_rows = []
+        for item in terminal_logs:
+            ts = item.get("ts")
+            when = datetime.fromtimestamp(ts / 1000).strftime("%H:%M:%S") if ts else ""
+            terminal_rows.append({
+                "Время": when,
+                "Уровень": item.get("level", "info"),
+                "Сообщение": item.get("message", "")
+            })
+        st.dataframe(terminal_rows, use_container_width=True)
+    else:
+        st.info("Логи терминала пока пустые")
+
+
+with tabs[2]:
     st.subheader("Соревнование BotA vs BotB")
 
     if "competition_reset_ts" not in st.session_state:
@@ -414,7 +477,7 @@ with tabs[1]:
 
     st.altair_chart(bar + labels, use_container_width=True)
 
-with tabs[2]:
+with tabs[3]:
     st.subheader("Фильтры")
     filters = profile.setdefault("filters", {})
     catalog = load_catalog()
@@ -489,7 +552,7 @@ with tabs[2]:
     save_config(config)
     st.caption("Автосохранение включено")
 
-with tabs[3]:
+with tabs[4]:
     st.subheader("Экономика")
     economics = profile.setdefault("economics", {})
     economics["mmr_multiplier"] = st.number_input("Множитель MMR", value=float(economics.get("mmr_multiplier", 0.97)), help="MMR * множитель")
@@ -501,7 +564,7 @@ with tabs[3]:
     save_config(config)
     st.caption("Автосохранение включено")
 
-with tabs[4]:
+with tabs[5]:
     st.subheader("Доставка")
     st.caption("Расчет доставки: если город в исключениях — берём фиксированную цену. Иначе считаем расстояние по штату, умножаем на коэффициент и округляем. Минимум $350.")
     st.markdown("**Доставка в Орландо.**")
@@ -551,7 +614,7 @@ with tabs[4]:
     save_config(config)
     st.caption("Автосохранение включено")
 
-with tabs[5]:
+with tabs[6]:
     st.subheader("История")
     history = load_history()
     if history:
